@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Illegal Parking Detection</title>
+    <style>
+         body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f8f9fa;
+            padding: 10px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            padding: 8px;
+            margin: 5px 0;
+            font-size: 14px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        select, input {
+            padding: 8px;
+            margin: 5px 0;
+            font-size: 14px;
+            width: 100%;
+        }
+        .full-width-box {
+            width: 100%;
+            background-color: #f4f4f4;
+            padding: 5px;
+            border-radius: 5px;
+            text-align: left;
+            margin-top: 5px;
+            min-height: 40px;
+            white-space: pre-wrap;
+            font-size: 12px;
+        }
+        h2, h3 {
+            font-size: 16px;
+            margin: 5px 0;
+        }
+    </style>
+    <script>
+        function fetchUploadedVideos() {
+            fetch('/list_videos')
+            .then(response => response.json())
+            .then(data => {
+                let dropdown1 = document.getElementById('uploadedVideos1');
+                let dropdown2 = document.getElementById('uploadedVideos2');
+                dropdown1.innerHTML = '<option value="">-- Select a Video --</option>';
+                dropdown2.innerHTML = '<option value="">-- Select a Video --</option>';
+                data.videos.forEach(video => {
+                    let option1 = document.createElement('option');
+                    option1.value = video;
+                    option1.textContent = video;
+                    dropdown1.appendChild(option1);
+
+                    let option2 = document.createElement('option');
+                    option2.value = video;
+                    option2.textContent = video;
+                    dropdown2.appendChild(option2);
+                });
+            })
+            .catch(error => console.error('Error fetching videos:', error));
+        }
+
+        function processVideo(filename) {
+            return fetch('/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: filename })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert("Error processing " + filename + ": " + data.error);
+                    throw new Error(data.error);
+                }
+                return data;
+            });
+        }
+
+        function processSelectedVideo() {
+            let filename = document.getElementById('uploadedVideos1').value;
+            if (!filename) {
+                alert("Please select a video first.");
+                return;
+            }
+            processVideo(filename).then(() => {
+                alert("Processing completed for " + filename);
+            });
+        }
+
+      function fetchResults() {
+    let filename = document.getElementById('uploadedVideos1').value;
+    if (!filename) {
+        alert("Please process a file first");
+        return;
+    }
+
+    fetch(`/results?filename=${filename}`)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error("Result file not found or invalid");
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.results) {
+            document.getElementById('results').innerText = "Detected Plates:\n" + data.results.join('\n');
+        } else {
+            alert("No valid results found.");
+            document.getElementById('results').innerText = "❌ No results found.";
+        }
+    })
+    .catch(error => {
+        document.getElementById('results').innerText = "❌ No results found.";
+        console.error('Error fetching results:', error);
+    });
+}
+
+
+
+        function fetchComparisonResults() {
+            let video1 = document.getElementById('uploadedVideos1').value;
+            let video2 = document.getElementById('uploadedVideos2').value;
+            if (!video1 || !video2) {
+                alert("Please select two videos to compare.");
+                return;
+            }
+            
+            Promise.all([processVideo(video1), processVideo(video2)])
+            .then(() => {
+                return fetch(`/compare_videos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video1: video1, video2: video2 })
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.common_plates && data.common_plates.length > 0) {
+                    document.getElementById('comparisonResults').innerText = "Common Vehicles:\n" + data.common_plates.join('\n');
+                } else {
+                    document.getElementById('comparisonResults').innerText = "No common vehicles found.";
+                }
+            })
+            .catch(error => console.error('Error processing or comparing videos:', error));
+        }
+
+        function uploadVideo() {
+            let fileInput = document.getElementById('videoUpload');
+            let file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a file to upload.");
+                return;
+            }
+
+            let formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || data.error);
+                fetchUploadedVideos();  // Refresh the video list after upload
+            })
+            .catch(error => console.error('Error uploading file:', error));
+        }
+
+        window.onload = fetchUploadedVideos;
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h2>Illegal Parking Detection System</h2>
+        
+        <h3>Upload a New Video</h3>
+        <input type="file" id="videoUpload" accept="video/*">
+        <button onclick="uploadVideo()">Upload Video</button>
+        <br><br>
+        
+        <h3>Select an Existing Video</h3>
+        <select id="uploadedVideos1">
+            <option value="">-- Select a Video --</option>
+        </select>
+        <button onclick="processSelectedVideo()">Process Selected Video</button>
+        <br><br>
+
+        <h3>Compare Two Videos</h3>
+        <select id="uploadedVideos2">
+            <option value="">-- Select a Video --</option>
+        </select>
+        <button onclick="fetchComparisonResults()">Compare Videos</button>
+        <br><br>
+
+        <h3>Fetch Results</h3>
+        <button onclick="fetchResults()">Display Results</button>
+        <pre id="results" class="full-width-box">Results will appear here...</pre>
+        <pre id="comparisonResults" class="full-width-box">Comparison results will appear here...</pre>
+    </div>
+</body>
+</html>
